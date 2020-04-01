@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# Editor swap file
+*.swp
+
+# Protobuf c++ file
+*.pb.h
+*.pb.cc
+
+# compiler temp file
+build/
