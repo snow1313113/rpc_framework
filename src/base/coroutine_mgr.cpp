@@ -149,14 +149,14 @@ void CoroObjMgr::free(CoroObj *coro_obj_)
         thread_local_data->free_coros.push_front(coro_obj_);
 }
 
-void *CoroObjMgr::run_loop(void *arg_)
+void *CoroObjMgr::run_loop(void *arg_, void *arg2_)
 {
     auto coro = reinterpret_cast<CoroObj *>(arg_);
     while (true)
     {
         coro->m_task();
         coro->m_task = nullptr;
-        CoroObjMgr::GetInst().free(coro);
+        CoroObjMgr::instance().free(coro);
         coro->yield();
     }
     return nullptr;

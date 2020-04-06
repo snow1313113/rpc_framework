@@ -41,7 +41,7 @@ public:
     CoroObj *cur_coro();
 
 private:
-    friend class Singleton<CoroObjMgr>;
+    friend struct Singleton<CoroObjMgr>;
     CoroObjMgr(const CoroObjMgr &) = delete;
     CoroObjMgr(CoroObjMgr &&) = delete;
     CoroObjMgr &operator=(const CoroObjMgr &) = delete;
@@ -50,7 +50,7 @@ private:
 
     CoroObj *allocate();
     void free(CoroObj *coro_obj_);
-    static void *run_loop(void *arg_);
+    static void *run_loop(void *arg_, void *arg2_);
 
 private:
     size_t m_stack_size;

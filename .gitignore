@@ -39,4 +39,4 @@
 *.pb.cc
 
 # compiler temp file
-build/
+/build
