@@ -2,7 +2,9 @@ cmake_minimum_required (VERSION 2.6)
 
 project(rpc_framework)
 
-include_directories(${LIBCO_INCLUDE})
+include_directories(
+    ${BASE_INCLUDE}
+    ${LIBCO_INCLUDE})
 
 file(GLOB_RECURSE CC_SOURCE *.cpp)
 

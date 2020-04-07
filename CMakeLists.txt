@@ -26,6 +26,7 @@ endif()
 SET(MY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 SET(MY_LIB_DIR ${MY_ROOT}/lib)
 
+SET(BASE_INCLUDE ${MY_ROOT}/src)
 SET(LIBCO_INCLUDE ${MY_ROOT}/third_party/libco)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -fPIC -std=c++14")
