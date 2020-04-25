@@ -17,9 +17,9 @@ template <typename... TServices>
 class BaseSvr : public TServices...
 {
 public:
-    bool init(bool use_coro)
+    bool init(bool use_coro_)
     {
-        if (!m_context_ctrl.init(user_coro))
+        if (!m_context_ctrl.init(user_coro_))
             return false;
 
         (TServices::set_context_ctrl(&m_context_ctrl), ...);
