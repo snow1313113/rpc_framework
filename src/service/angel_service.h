@@ -11,20 +11,12 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include "angel_pkg.h"
 #include "base/context_controller.h"
 #include "base/singleton.h"
 
 namespace pepper
 {
-struct AngelPkgHeader
-{
-    uint64_t gid = 0;
-    uint64_t seq_id = 0;
-    uint32_t cmd = 0;
-    int8_t pkg_flag = 0;
-    int8_t msg_type = 0;
-};
-
 class AngelService : public Singleton<AngelService>
 {
 public:
@@ -49,6 +41,9 @@ public:
                       uint64_t dest_ = 0, bool broadcast_ = false, uint32_t timeout_ = 3000);
     /// 设置通道收包开关
     void channel_switch(bool stop_);
+
+private:
+    void on_recv(uint32_t channel_index, const char* data_, size_t len_, uint64_t src);
 
 private:
     friend Singleton<AngelService>;
@@ -77,11 +72,11 @@ private:
         uint32_t cmd = 0;
     };
     std::unordered_map<uint64_t, AngelRpcCache> m_rpc_cache;
-    /// 收发包的多个通道
+    // 收发包的多个通道
     std::vector<IChannel*> m_channels;
-    /// 上下文切换管理器
+    // 上下文切换管理器
     ContextController* m_context_ctrl = nullptr;
-    /// 停止从通道收包开关
+    // 停止从通道收包开关
     bool m_channel_switch = false;
 };
 
