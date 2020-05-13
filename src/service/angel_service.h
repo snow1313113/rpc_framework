@@ -17,6 +17,28 @@
 
 namespace pepper
 {
+class IAngelChannel
+{
+public:
+    /// 参数分别是数据头指针，数据长度，已经数据来源id
+    using RecvFunc = std::function<void(const AngelPkgHead&, const char*, size_t, uint64_t)>;
+
+    /// 设置收包的回调函数
+    void set_recv_func(const RecvFunc& recv_fun_) { m_recv_func = recv_fun_; }
+    void set_recv_func(RecvFunc&& recv_fun_) { m_recv_func = std::move(recv_fun_); }
+    /// 如果*dest != 0，则根据*dest发送，否则根据默认规则发送，并且dest带回最终发送的目标
+    virtual uint64_t send(const char* buff_, size_t buff_len_, uint64_t* dest_ = nullptr) = 0;
+    /// 广播
+    virtual uint64_t broadcast(const char* buff_, size_t buff_len_) = 0;
+    /// 执行处理，返回处理了多少次收包
+    virtual size_t process() = 0;
+
+    virtual ~IAngelChannel() = default;
+
+protected:
+    RecvFunc m_recv_func = nullptr;
+};
+
 class AngelService : public Singleton<AngelService>
 {
 public:
@@ -27,7 +49,7 @@ public:
     /// 设置conext controller，适配BaseSvr
     void set_context_ctrl(ContextController* context_ctrl_);
     /// 添加通道，返回通道的索引
-    uint32_t add_channel(IChannel* channel_);
+    uint32_t add_channel(IAngelChannel* channel_);
     /// 注册提供的服务
     bool register_pb_service(google::protobuf::Service* service_);
     /// 循环收发包处理，返回处理了多个请求和超时事件，适配BaseSvr
@@ -37,8 +59,9 @@ public:
                 uint64_t dest_ = 0, bool broadcast_ = false, uint32_t timeout_ = 3000);
     /// 发起异步rpc，当前不能处于协程中，callback是回包或超时的时候的回调，timeout_是超时时间间隔，单位是ms
     int32_t async_rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::Message& req_,
-                      google::protobuf::Message* rsp_ = nullptr, NextFun next_fun = nullptr, Context* context = nullptr,
-                      uint64_t dest_ = 0, bool broadcast_ = false, uint32_t timeout_ = 3000);
+                      google::protobuf::Message* rsp_ = nullptr, NextFun next_fun_ = nullptr,
+                      Context* context_ = nullptr, uint64_t dest_ = 0, bool broadcast_ = false,
+                      uint32_t timeout_ = 3000);
     /// 设置通道收包开关
     void channel_switch(bool stop_);
 
@@ -50,8 +73,6 @@ private:
     AngelService(const AngelService&) = delete;
     AngelService(AngelService&&) = delete;
     AngelService& operator=(const AngelService&) = delete;
-    AngelService() = default;
-    ~AngelService() = default;
 
 private:
     /// 已经注册的method
@@ -73,7 +94,7 @@ private:
     };
     std::unordered_map<uint64_t, AngelRpcCache> m_rpc_cache;
     // 收发包的多个通道
-    std::vector<IChannel*> m_channels;
+    std::vector<IAngelChannel*> m_channels;
     // 上下文切换管理器
     ContextController* m_context_ctrl = nullptr;
     // 停止从通道收包开关

@@ -22,7 +22,7 @@ void AngelService::set_context_ctrl(ContextController* context_ctrl_)
     m_context_ctrl = context_ctrl_;
 }
 
-uint32_t AngelService::add_channel(IChannel* channel_)
+uint32_t AngelService::add_channel(IAngelChannel* channel_)
 {
     if (channel_)
     {
@@ -83,15 +83,94 @@ size_t AngelService::loop_once()
 int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::Message& req_,
                           google::protobuf::Message* rsp_, uint64_t dest_, bool broadcast_, uint32_t timeout_)
 {
-    // todo
+    if (!m_context_ctrl->is_use_corotine())
+        return RPC_SYS_ERR;
+
+    if (broadcast_ && rsp_)
+        return RPC_SYS_ERR;
+
+    uint64_t new_seq_id = m_context_ctrl->generate_seq_id();
+
+    AngelPkgHead head;
+    head.gid = gid_;
+    head.cmd = cmd_;
+    head.msg_type = AngelPkgHead::REQ_MSG;
+    if (rsp_)
+        head.seq_id = new_seq_id;
+    else
+        head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
+
+    // todo 需要传入指定第几个通道
+    auto ret = m_channels[0]->send(head, req_, broadcast_);
+    if (ret != RPC_SUCCESS)
+        return ret;
+
+    if (rsp_)
+    {
+        auto coro = CoroObjMgr::instance().cur_coro();
+        assert(coro);
+        auto result = m_rpc_cache.insert({new_seq_id, {rsp_, gid_, cmd_)}});
+        if (result.second)
+        {
+            // todo 这是要过期时间，不是超时间隔
+            ret = m_context_ctrl->pending(new_seq_id, coro, timeout_);
+            if (ret == RPC_TIME_OUT)
+                m_rpc_cache.erase(new_seq_id);
+            return ret;
+        }
+        else
+            return RPC_SYS_ERR;
+    }
+
     return RPC_SUCCESS;
 }
 
 int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::Message& req_,
-                                google::protobuf::Message* rsp_, NextFun next_fun, Context* context, uint64_t dest_,
+                                google::protobuf::Message* rsp_, NextFun next_fun_, Context* context_, uint64_t dest_,
                                 bool broadcast_, uint32_t timeout_)
 {
-    // todo
+    if (m_context_ctrl->is_use_corotine())
+        return RPC_SYS_ERR;
+
+    if (broadcast_ && rsp_)
+        return RPC_SYS_ERR;
+
+    if ((rsp_ && !next_fun_) || (!rsp_ && next_fun_))
+        return RPC_SYS_ERR;
+
+    uint64_t new_seq_id = m_context_ctrl->generate_seq_id();
+
+    AngelPkgHead head;
+    head.gid = gid_;
+    head.cmd = cmd_;
+    head.msg_type = AngelPkgHead::REQ_MSG;
+    if (rsp_)
+        head.seq_id = new_seq_id;
+    else
+        head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
+
+    // 都从第一个channel发
+    auto ret = m_channels[0]->send(head, req_, broadcast_);
+    if (ret != RPC_SUCCESS)
+        return ret;
+
+    if (rsp_)
+    {
+        new_seq_id = m_context_ctrl->async_pending(
+            new_seq_id,
+            [=](int32_t ret_code) {
+                if (ret_code == RPC_TIME_OUT)
+                    m_rpc_cache.erase(new_seq_id);
+                return next_fun_(ret_code);
+            },
+            context_, timeout_);
+        if (new_seq_id == 0)
+            return RPC_SYS_ERR;
+
+        // 如果插入失败，等超时
+        m_rpc_cache.insert({new_seq_id, {rsp_, gid_, cmd_}});
+    }
+
     return RPC_SUCCESS;
 }
 
