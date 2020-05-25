@@ -27,8 +27,9 @@ uint32_t AngelService::add_channel(IAngelChannel* channel_)
     if (channel_)
     {
         uint32_t channel_index = m_channels.size() + 1;
-        channel_->set_recv_func(
-            [=](const char* data_, size_t len_, src_) { on_recv(channel_index, data_, len_, src_); });
+        channel_->set_recv_func([=](const AngelPkgHead& head_, const char* data_, size_t len_, src_) {
+            on_recv(channel_index, head_, data_, len_, src_);
+        });
         m_channels.push_back(channel_);
         return channel_index;
     }
@@ -57,9 +58,9 @@ bool AngelService::register_pb_service(google::protobuf::Service* service_)
             return false;
 
         bool is_private = is_service_private || method->options().GetExtension(IS_PRIVATE);
-        auto result = methods_.insert({cmd,
-                                       {service, method, &(service->GetRequestPrototype(method)),
-                                        &(service->GetResponsePrototype(method)), is_private}});
+        auto result = m_methods.insert({cmd,
+                                        {service, method, &(service->GetRequestPrototype(method)),
+                                         &(service->GetResponsePrototype(method)), is_private}});
         if (!(result.second))
             return false;
     }
@@ -179,7 +180,83 @@ void AngelService::channel_switch(bool stop_)
     m_channel_switch = stop_;
 }
 
-void AngelService::on_recv(uint32_t channel_index, const char* data_, size_t len_, uint64_t src)
+void AngelService::on_recv(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                           uint64_t src_)
+{
+    if (head_.msg_type == REQ_MSG)
+    {
+        deal_request(channel_index_, head_, data_, len_, src_);
+    }
+    else
+    {
+        deal_response(channel_index_, head_, data_, len_, src_);
+    }
+}
+
+void AngelService::deal_request(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                                uint64_t src_)
+{
+    deal_request_impl(channel_index_, head_, data_, len_, src_);
+}
+
+bool AngelService::deal_request_impl(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                                     uint64_t src_)
+{
+    auto iter = m_methods.find(head_.cmd);
+    if (iter == m_methods.end())
+        return false;
+
+    if (iter->second.is_private)
+        return false;
+
+    auto& rpc_method = iter->second;
+    std::unique_ptr<google::protobuf::Message> new_req(rpc_method.request->New());
+    if (!new_req->ParsePartialFromArray(data_, len_))
+        return false;
+
+    std::unique_ptr<google::protobuf::Message> new_rsp(rpc_method.response->New());
+    std::unique_ptr<AngelContext> context(new AngelContext(channel_index_, head_, new_req.get(), new_rsp.get()));
+    if (context_ctrl_->is_use_corotine())
+    {
+        if (!CoroObjMgr::instance().spawn([&]() { deal_method(context.get(), rpc_method.service, rpc_method.method); }))
+            return false;
+    }
+    else
+    {
+        auto context_ptr = context.get();
+        context->set_finish_fun([=]() { method_finish(context_ptr); });
+
+        deal_method(context.get(), rpc_method.service, rpc_method.method);
+
+        if (context->is_finish())
+            method_finish(context.get());
+    }
+
+    context.release();
+    new_req.release();
+    new_rsp.release();
+    return true;
+}
+
+void AngelService::deal_method(AngelContext* context_, google::protobuf::Service* service_,
+                               const google::protobuf::MethodDescriptor* method_desc_)
+{
+    service_->CallMethod(method_desc_, context_, context_->m_req, context_->m_rsp, nullptr);
+    if (context_->is_finish())
+        method_finish(context_.get());
+}
+
+void AngelService::method_finish(AngelContext* context_)
+{
+    // todo
+    // 结束的时候释放资源
+    delete context_->m_rsp;
+    delete context_->m_req;
+    delete context_;
+}
+
+void AngelService::deal_response(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                                 uint64_t src_)
 {
     // todo
 }

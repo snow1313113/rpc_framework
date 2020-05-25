@@ -39,6 +39,48 @@ protected:
     RecvFunc m_recv_func = nullptr;
 };
 
+// 和angel service配套的上下文信息
+struct AngelContext : public Context, public google::protobuf::RpcController
+{
+    AngelContext() = default;
+    AngelContext(uint32_t channel_index_, const AngelPkgHead& head_, google::protobuf::Message* req_,
+                 google::protobuf::Message* rsp_)
+    {
+        m_err_msg = "";
+        m_channel_index = channel_index_;
+        m_head = head_;
+        m_req = req_;
+        m_rsp = rsp_;
+    }
+
+    virtual void Reset() override
+    {
+        m_err_msg = "";
+        m_channel_index = 0;
+        std::memset(&m_head, 0, sizeof(m_head));
+        m_req = nullptr;
+        m_rsp = nullptr;
+    }
+
+    virtual bool Failed() const override { return m_ret_code != 0; }
+    virtual std::string ErrorText() const override { return m_err_msg; }
+    virtual void StartCancel() override {}
+
+    virtual void SetFailed(const std::string& reason) override
+    {
+        m_ret_code = RPC_SYS_ERR;
+        m_err_msg = reason;
+    }
+    virtual bool IsCanceled() const override { return false; }
+    virtual void NotifyOnCancel(google::protobuf::Closure* callback) override {}
+
+    std::string m_err_msg = "";
+    uint32_t m_channel_index = 0;
+    AngelPkgHead m_head;
+    google::protobuf::Message* m_req = nullptr;
+    google::protobuf::Message* m_rsp = nullptr;
+};
+
 class AngelService : public Singleton<AngelService>
 {
 public:
@@ -66,7 +108,19 @@ public:
     void channel_switch(bool stop_);
 
 private:
-    void on_recv(uint32_t channel_index, const char* data_, size_t len_, uint64_t src);
+    void on_recv(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_, uint64_t src_);
+
+    void deal_request(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                      uint64_t src_);
+    bool deal_request_impl(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                           uint64_t src_);
+    void deal_method(AngelContext* context_, google::protobuf::Service* service_,
+                     const google::protobuf::MethodDescriptor* method_desc_);
+
+    void deal_response(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
+                       uint64_t src_);
+
+    void method_finish(AngelContext* context_);
 
 private:
     friend Singleton<AngelService>;

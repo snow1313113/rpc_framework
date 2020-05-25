@@ -24,32 +24,32 @@ struct Context
     /// 流程结束的时候需要回调的函数
     using FinishFun = std::function<void()>;
 
-    int32_t ret_code = 0;
-    void set_finish_fun(const FinishFun& fun) { finish_fun = fun; }
-    void set_finish_fun(FinishFun&& fun) { finish_fun = std::move(fun); }
-    bool is_finish() const { return ret_code || !next_fun; }
+    int32_t m_ret_code = 0;
+    void set_finish_fun(const FinishFun& fun_) { m_finish_fun = fun_; }
+    void set_finish_fun(FinishFun&& fun_) { m_finish_fun = std::move(fun_); }
+    bool is_finish() const { return m_ret_code || !m_next_fun; }
 
 private:
     friend class ContextController;
     void run(int32_t ret_code_)
     {
-        assert(next_fun);
-        auto tmp_next_fun = next_fun;
-        next_fun = nullptr;
-        ret_code = tmp_next_fun(ret_code_);
+        assert(m_next_fun);
+        auto tmp_next_fun = m_next_fun;
+        m_next_fun = nullptr;
+        m_ret_code = tmp_next_fun(ret_code_);
         if (is_finish())
         {
-            finish_fun();
+            m_finish_fun();
         }
     }
-    void set_next(const NextFun& fun) { next_fun = fun; }
-    void set_next(NextFun&& fun) { next_fun = std::move(fun); }
+    void set_next(const NextFun& fun_) { m_next_fun = fun_; }
+    void set_next(NextFun&& fun_) { m_next_fun = std::move(fun_); }
 
 private:
-    uint32_t timer_id = 0;
-    CoroObj* coro_obj = nullptr;
-    NextFun next_fun = nullptr;
-    FinishFun finish_fun = nullptr;
+    uint32_t m_timer_id = 0;
+    CoroObj* m_coro_obj = nullptr;
+    NextFun m_next_fun = nullptr;
+    FinishFun m_finish_fun = nullptr;
 };
 
 class ContextController
