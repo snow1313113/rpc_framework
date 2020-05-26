@@ -107,6 +107,9 @@ public:
     void channel_switch(bool stop_);
 
 private:
+    int32_t send(uint32_t channel_index_, const AngelPkgHead& head_, const google::protobuf::Message& msg_,
+                 bool broadcast_ = false);
+
     void on_recv(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_, uint64_t src_);
 
     void deal_request(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
@@ -145,6 +148,9 @@ private:
     ContextController* m_context_ctrl = nullptr;
     // 停止从通道收包开关
     bool m_channel_switch = false;
+    // 发送用的buf
+    static constexpr size_t SEND_BUF_LEN = 4 * 1024;
+    char m_send_buf[SEND_BUF_LEN];
 };
 
 }  // namespace pepper
