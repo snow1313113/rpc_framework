@@ -13,7 +13,6 @@
 #include <vector>
 #include "angel_pkg.h"
 #include "base/context_controller.h"
-#include "base/singleton.h"
 
 namespace pepper
 {
@@ -81,7 +80,7 @@ struct AngelContext : public Context, public google::protobuf::RpcController
     google::protobuf::Message* m_rsp = nullptr;
 };
 
-class AngelService : public Singleton<AngelService>
+class AngelService
 {
 public:
     using NextFun = Context::NextFun;
@@ -117,16 +116,9 @@ private:
     void deal_method(AngelContext* context_, google::protobuf::Service* service_,
                      const google::protobuf::MethodDescriptor* method_desc_);
 
-    void deal_response(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                       uint64_t src_);
+    void deal_response(const AngelPkgHead& head_, const char* data_, size_t len_);
 
     void method_finish(AngelContext* context_);
-
-private:
-    friend Singleton<AngelService>;
-    AngelService(const AngelService&) = delete;
-    AngelService(AngelService&&) = delete;
-    AngelService& operator=(const AngelService&) = delete;
 
 private:
     /// 已经注册的method

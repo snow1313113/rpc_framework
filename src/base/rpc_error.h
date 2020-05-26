@@ -13,6 +13,7 @@ namespace pepper
 const int32_t RPC_SUCCESS = 0;
 const int32_t RPC_SYS_ERR = -1;
 const int32_t RPC_TIME_OUT = -2;
+const int32_t RPC_MSG_PARSE_ERR = -3;
 }  // namespace pepper
 
 #endif

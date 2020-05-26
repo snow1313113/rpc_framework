@@ -41,10 +41,7 @@ bool AngelService::register_pb_service(google::protobuf::Service* service_)
     auto service_desc = service->GetDescriptor();
     auto service_type = service_desc->options().GetExtension(SERVICE_TYPE);
     if (service_type != ANGEL_SERVICE)
-    {
-        ERR_LOG(0, 0, 0, "", "register tcp service to pb service");
         return false;
-    }
 
     bool is_service_private = service_desc->options().GetExtension(IS_ALL_PRIVATE);
     for (int i = 0; i < service_desc->method_count(); ++i)
@@ -189,7 +186,7 @@ void AngelService::on_recv(uint32_t channel_index_, const AngelPkgHead& head_, c
     }
     else
     {
-        deal_response(channel_index_, head_, data_, len_, src_);
+        deal_response(head_, data_, len_);
     }
 }
 
@@ -255,10 +252,34 @@ void AngelService::method_finish(AngelContext* context_)
     delete context_;
 }
 
-void AngelService::deal_response(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                                 uint64_t src_)
+void AngelService::deal_response(const AngelPkgHead& head_, const char* data_, size_t len_)
 {
-    // todo
+    uint64_t seq_id = head_.seq_id;
+    auto iter = m_rpc_cache.find(seq_id);
+    if (iter == m_rpc_cache.end())
+        return;
+
+    auto cache = iter->second;
+    assert(cache.rsp);
+    m_rpc_cache.erase(iter);
+
+    int32_t ret_code = RPC_SUCCESS;
+    if (head_.gid != cache.gid || head_.cmd != cache.cmd)
+        ret_code = RPC_SYS_ERR;
+    else
+    {
+        ret_code = head_.ret;
+        if (ret_code == RPC_SUCCESS && len_ > 0)
+        {
+            if (!cache.rsp->ParseFromArray(data_, len_))
+                ret_code = RPC_MSG_PARSE_ERR;
+        }
+    }
+
+    if (m_context_ctrl->is_use_corotine())
+        m_context_ctrl->awake(seq_id, ret_code);
+    else
+        m_context_ctrl->async_awake(seq_id, ret_code);
 }
 
 }  // namespace pepper
