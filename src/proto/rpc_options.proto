@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+
+enum ServiceType
+{
+    NULL_SERVICE = 0;
+    ANGEL_SERVICE = 1;
+}
+
+extend google.protobuf.ServiceOptions
+{
+    // rpc提供的服务类型
+    optional ServiceType service_type = 40000;
+    // 是否私有service
+    optional bool is_private = 40001;
+}
+
+extend google.protobuf.MethodOptions
+{
+    // rpc提供的服务类型
+    optional ServiceType service_type = 40000;
+    // 是否私有rpc
+    optional bool is_private = 40001;
+    // 是否广播rpc
+    optional bool is_broadcast = 40002;
+    // rpc等待超时间隔，毫秒
+    optional uint64 timeout = 40003;
+    // rpc的cmd
+    optional uint32 cmd = 40004;
+}
+
