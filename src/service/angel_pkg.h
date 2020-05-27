@@ -31,7 +31,6 @@ struct AngelPkgHead
     uint8_t pkg_flag = 0;
     MSG_TYPE msg_type = REQ_MSG;
     uint32_t len = 0;
-    uint32_t magic = 0;
 };
 }  // namespace pepper
 

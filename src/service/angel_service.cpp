@@ -38,26 +38,26 @@ uint32_t AngelService::add_channel(IAngelChannel* channel_)
 
 bool AngelService::register_pb_service(google::protobuf::Service* service_)
 {
-    auto service_desc = service->GetDescriptor();
-    auto service_type = service_desc->options().GetExtension(SERVICE_TYPE);
-    if (service_type != ANGEL_SERVICE)
+    auto service_desc = service_->GetDescriptor();
+    auto type = service_desc->options().GetExtension(service_type);
+    if (type != ANGEL_SERVICE)
         return false;
 
-    bool is_service_private = service_desc->options().GetExtension(IS_ALL_PRIVATE);
+    bool is_service_private = service_desc->options().GetExtension(is_private);
     for (int i = 0; i < service_desc->method_count(); ++i)
     {
         auto method = service_desc->method(i);
-        if (method->options().GetExtension(METHOD_TYPE) != ANGEL_METHOD)
+        if (method->options().GetExtension(service_type) != ANGEL_METHOD)
             continue;
 
-        uint32_t cmd = method->options().GetExtension(METHOD_CMD);
+        uint32_t cmd = method->options().GetExtension(cmd);
         if (cmd == 0)
             return false;
 
-        bool is_private = is_service_private || method->options().GetExtension(IS_PRIVATE);
+        bool is_private = is_service_private || method->options().GetExtension(is_private);
         auto result = m_methods.insert({cmd,
-                                        {service, method, &(service->GetRequestPrototype(method)),
-                                         &(service->GetResponsePrototype(method)), is_private}});
+                                        {service_, method, &(service_->GetRequestPrototype(method)),
+                                         &(service_->GetResponsePrototype(method)), is_private}});
         if (!(result.second))
             return false;
     }
@@ -90,11 +90,13 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
     AngelPkgHead head;
     head.gid = gid_;
     head.cmd = cmd_;
+    head.ret = RPC_SUCCESS;
     head.msg_type = AngelPkgHead::REQ_MSG;
     if (rsp_)
         head.seq_id = new_seq_id;
     else
         head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
+    head.len = req_.ByteSizeLong();
 
     // 从第一个通道发送
     auto ret = send(0, head, req_, broadcast_);
@@ -139,11 +141,13 @@ int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::prot
     AngelPkgHead head;
     head.gid = gid_;
     head.cmd = cmd_;
+    head.ret = RPC_SUCCESS;
     head.msg_type = AngelPkgHead::REQ_MSG;
     if (rsp_)
         head.seq_id = new_seq_id;
     else
         head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
+    head.len = req_.ByteSizeLong();
 
     // 都从第一个channel发
     auto ret = send(0, head, req_, broadcast_);
@@ -243,7 +247,13 @@ void AngelService::deal_method(AngelContext* context_, google::protobuf::Service
 
 void AngelService::method_finish(AngelContext* context_)
 {
-    // todo
+    if (!(context_->m_head.pkg_flag & FLAG_DONT_RSP))
+    {
+        context_->m_head.pkg_flag |= FLAG_DONT_RSP;
+        context_->m_head.msg_type = RSP_PKG;
+        send(context_->m_channel_index, context_->m_head, *(context_->m_rsp));
+    }
+
     // 结束的时候释放资源
     delete context_->m_rsp;
     delete context_->m_req;
@@ -259,17 +269,19 @@ int32_t AngelService::send(uint32_t channel_index_, const AngelPkgHead& head_, c
     AngelPkgHead* send_head = reintrepret_cast<AngelPkgHead*>(m_send_buf);
     *send_head = head_;
     char* body = reinterpret_cast<char*>(send_head + 1);
-    size_t body_len = msg_.ByteSizeLong();
-    if (body_len > SEND_BUF_LEN - sizeof(AngelPkgHead))
+    if (head_.len > SEND_BUF_LEN - sizeof(AngelPkgHead))
         return RPC_SYS_ERR;
 
-    if (!msg_.SerializeToArray(body, SEND_BUF_LEN - sizeof(AngelPkgHead)))
-        return RPC_SERIALIZE_MSG_ERR;
+    if (head_.len > 0)
+    {
+        if (!msg_.SerializeToArray(body, SEND_BUF_LEN - sizeof(AngelPkgHead)))
+            return RPC_SERIALIZE_MSG_ERR;
+    }
 
     if (broadcast_)
-        return m_channels[channel_index_ - 1]->broadcast(m_send_buf, body_len + sizeof(AngelPkgHead));
+        return m_channels[channel_index_ - 1]->broadcast(m_send_buf, head_.len + sizeof(AngelPkgHead));
     else
-        return m_channels[channel_index_ - 1]->send(m_send_buf, body_len + sizeof(AngelPkgHead));
+        return m_channels[channel_index_ - 1]->send(m_send_buf, head_.len + sizeof(AngelPkgHead));
 }
 
 void AngelService::deal_response(const AngelPkgHead& head_, const char* data_, size_t len_)
