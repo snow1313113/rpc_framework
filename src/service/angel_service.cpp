@@ -105,13 +105,11 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
 
     if (rsp_)
     {
-        auto coro = CoroObjMgr::instance().cur_coro();
-        assert(coro);
         auto result = m_rpc_cache.insert({new_seq_id, {rsp_, gid_, cmd_)}});
         if (result.second)
         {
             // todo 这是要过期时间，不是超时间隔
-            ret = m_context_ctrl->pending(new_seq_id, coro, timeout_);
+            ret = m_context_ctrl->pending(new_seq_id, timeout_);
             if (ret == RPC_TIME_OUT)
                 m_rpc_cache.erase(new_seq_id);
             return ret;
@@ -208,27 +206,26 @@ bool AngelService::deal_request_impl(uint32_t channel_index_, const AngelPkgHead
     if (iter->second.is_private)
         return false;
 
-    auto& rpc_method = iter->second;
+    auto&& rpc_method = iter->second;
     std::unique_ptr<google::protobuf::Message> new_req(rpc_method.request->New());
     if (!new_req->ParsePartialFromArray(data_, len_))
         return false;
 
     std::unique_ptr<google::protobuf::Message> new_rsp(rpc_method.response->New());
     std::unique_ptr<AngelContext> context(new AngelContext(channel_index_, head_, new_req.get(), new_rsp.get()));
+
+    auto context_ptr = context.get();
+    auto proto_service_ptr = rpc_method.service;
+    auto method_desc_ptr = rpc_method.method;
     if (m_context_ctrl->is_use_corotine())
     {
-        if (!CoroObjMgr::instance().spawn([&]() { deal_method(context.get(), rpc_method.service, rpc_method.method); }))
+        if (!CoroObjMgr::instance().spawn([=]() { deal_method(context_ptr, proto_service_ptr, method_desc_ptr); }))
             return false;
     }
     else
     {
-        auto context_ptr = context.get();
-        context->set_finish_fun([=]() { method_finish(context_ptr); });
-
-        deal_method(context.get(), rpc_method.service, rpc_method.method);
-
-        if (context->is_finish())
-            method_finish(context.get());
+        context_ptr->set_finish_fun([=]() { method_finish(context_ptr); });
+        deal_method(context_ptr, proto_service_ptr, method_desc_ptr);
     }
 
     context.release();
@@ -241,8 +238,8 @@ void AngelService::deal_method(AngelContext* context_, google::protobuf::Service
                                const google::protobuf::MethodDescriptor* method_desc_)
 {
     service_->CallMethod(method_desc_, context_, context_->m_req, context_->m_rsp, nullptr);
-    if (context_->is_finish())
-        method_finish(context_.get());
+    if (m_context_ctrl->is_use_corotine() || context_->is_finish())
+        method_finish(context_);
 }
 
 void AngelService::method_finish(AngelContext* context_)
@@ -266,7 +263,7 @@ int32_t AngelService::send(uint32_t channel_index_, const AngelPkgHead& head_, c
     if (channel_index_ == 0 || channel_index_ > m_channels.size())
         return RPC_SYS_ERR;
 
-    AngelPkgHead* send_head = reintrepret_cast<AngelPkgHead*>(m_send_buf);
+    AngelPkgHead* send_head = reinterpret_cast<AngelPkgHead*>(m_send_buf);
     *send_head = head_;
     char* body = reinterpret_cast<char*>(send_head + 1);
     if (head_.len > SEND_BUF_LEN - sizeof(AngelPkgHead))
@@ -308,10 +305,7 @@ void AngelService::deal_response(const AngelPkgHead& head_, const char* data_, s
         }
     }
 
-    if (m_context_ctrl->is_use_corotine())
-        m_context_ctrl->awake(seq_id, ret_code);
-    else
-        m_context_ctrl->async_awake(seq_id, ret_code);
+    m_context_ctrl->awake(seq_id, ret_code);
 }
 
 }  // namespace pepper

@@ -59,14 +59,13 @@ public:
     bool init(bool use_coro_);
     /// 处理定时器，传入当前时间
     uint32_t process_timeout(uint64_t now_);
-    /// 挂起当前协程事务，seq_id_可以generate_seq_id来生成，如果传0则内部自己生成一个，coro_obj_为当前协程对象
-    int32_t pending(uint64_t seq_id_, CoroObj* coro_obj_, uint64_t expire_time_);
-    /// 唤醒当前协程事务
-    void awake(uint64_t seq_id_, int32_t ret_code_);
+    /// 挂起当前协程事务，seq_id_可以generate_seq_id来生成，如果传0则内部自己生成一个
+    int32_t pending(uint64_t seq_id_, uint64_t expire_time_);
     /// 挂起异步事务，seq_id_可以generate_seq_id来生成，如果传0则内部自己生成一个，返回最终使用的seq_id_
-    uint64_t async_pending(uint64_t seq_id_, Context::NextFun next_fun_, Context* context_, uint64_t expire_time_);
-    /// 唤醒异步事务
-    void async_awake(uint64_t seq_id_, int32_t ret_code_);
+    uint64_t async_pending(uint64_t seq_id_, const Context::NextFun& next_fun_, Context* context_,
+                           uint64_t expire_time_);
+    /// 唤醒之前的上下文
+    void awake(uint64_t seq_id_, int32_t ret_code_);
     /// 产生一个唯一ID
     uint64_t generate_seq_id();
     /// 当前是否选择了用协程

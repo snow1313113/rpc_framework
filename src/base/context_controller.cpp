@@ -27,12 +27,13 @@ uint32_t ContextController::process_timeout(uint64_t now_)
     return m_timer_mgr.timeout(now_);
 }
 
-int32_t ContextController::pending(uint64_t seq_id_, CoroObj* coro_obj_, uint64_t expire_time_)
+int32_t ContextController::pending(uint64_t seq_id_, uint64_t expire_time_)
 {
-    if (!m_use_corotine || !coro_obj_)
+    if (!m_use_corotine)
         return RPC_SYS_ERR;
 
-    assert(coro_obj_);
+    auto coro_obj = CoroObjMgr::instance().cur_coro();
+    assert(coro_obj);
 
     if (seq_id_ == 0)
         seq_id_ = generate_seq_id();
@@ -42,15 +43,39 @@ int32_t ContextController::pending(uint64_t seq_id_, CoroObj* coro_obj_, uint64_
         return RPC_SYS_ERR;
 
     Context context;
-    context.m_coro_obj = coro_obj_;
+    context.m_coro_obj = coro_obj;
     context.m_timer_id = timer_id;
     auto result = m_context_cache.insert({seq_id_, &context});
     if (result.second)
-        coro_obj_->yield();
+        coro_obj->yield();
     else
         return RPC_SYS_ERR;
 
     return context.m_ret_code;
+}
+
+uint64_t ContextController::async_pending(uint64_t seq_id_, const Context::NextFun& next_fun_, Context* context_,
+                                          uint64_t expire_time_)
+{
+    if (!next_fun_ || !context_)
+        return 0;
+
+    if (m_use_corotine)
+        return 0;
+
+    if (seq_id_ == 0)
+        seq_id_ = generate_seq_id();
+
+    uint32_t timer_id = m_timer_mgr.add([=]() { awake(seq_id_, RPC_TIME_OUT); }, expire_time_);
+    if (timer_id == 0)
+        return 0;
+
+    context_->m_timer_id = timer_id;
+    auto result = m_context_cache.insert({seq_id_, context_});
+    if (result.second)
+        context_->set_next(next_fun_);
+
+    return seq_id_;
 }
 
 void ContextController::awake(uint64_t seq_id_, int32_t ret_code_)
@@ -69,52 +94,17 @@ void ContextController::awake(uint64_t seq_id_, int32_t ret_code_)
     context->m_ret_code = ret_code_;
     context->m_timer_id = 0;
 
-    assert(context->m_coro_obj);
-    // 唤醒协程
-    context->m_coro_obj->resume();
-}
-
-uint64_t ContextController::async_pending(uint64_t seq_id_, Context::NextFun next_fun_, Context* context_,
-                                          uint64_t expire_time_)
-{
-    if (!next_fun_ || !context_)
-        return 0;
-
     if (m_use_corotine)
-        return 0;
-
-    if (seq_id_ == 0)
-        seq_id_ = generate_seq_id();
-
-    uint32_t timer_id = m_timer_mgr.add([=]() { async_awake(seq_id_, RPC_TIME_OUT); }, expire_time_);
-    if (timer_id == 0)
-        return 0;
-
-    context_->m_timer_id = timer_id;
-    auto result = m_context_cache.insert({seq_id_, context_});
-    if (result.second)
-        context_->set_next(next_fun_);
-
-    return seq_id_;
-}
-
-void ContextController::async_awake(uint64_t seq_id_, int32_t ret_code_)
-{
-    auto iter = m_context_cache.find(seq_id_);
-    if (iter == m_context_cache.end())
-        return;
-
-    auto context = iter->second;
-    m_context_cache.erase(iter);
-
-    if (ret_code_ != RPC_TIME_OUT)
-        m_timer_mgr.cancel(context->m_timer_id);
-
-    context->m_ret_code = ret_code_;
-    context->m_timer_id = 0;
-
-    // 继续事务的流程
-    context->run(context->m_ret_code);
+    {
+        assert(context->m_coro_obj);
+        // 唤醒协程
+        context->m_coro_obj->resume();
+    }
+    else
+    {
+        // 继续事务的流程
+        context->run(context->m_ret_code);
+    }
 }
 
 uint64_t ContextController::generate_seq_id()
