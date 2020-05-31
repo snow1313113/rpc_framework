@@ -32,6 +32,13 @@ struct AngelPkgHead
     MSG_TYPE msg_type = REQ_MSG;
     uint32_t len = 0;
 };
+
+struct AngelPkg
+{
+    AngelPkgHead head;
+    char body[0];
+};
+
 }  // namespace pepper
 
 #endif

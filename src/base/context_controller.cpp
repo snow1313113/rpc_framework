@@ -27,7 +27,7 @@ uint32_t ContextController::process_timeout(uint64_t now_)
     return m_timer_mgr.timeout(now_);
 }
 
-int32_t ContextController::pending(uint64_t seq_id_, uint64_t expire_time_)
+int32_t ContextController::pending(uint64_t seq_id_, uint64_t expire_time_, const PendingTimeoutFunc& func_)
 {
     if (!m_use_corotine)
         return RPC_SYS_ERR;
@@ -38,7 +38,13 @@ int32_t ContextController::pending(uint64_t seq_id_, uint64_t expire_time_)
     if (seq_id_ == 0)
         seq_id_ = generate_seq_id();
 
-    uint32_t timer_id = m_timer_mgr.add([=]() { awake(seq_id_, RPC_TIME_OUT); }, expire_time_);
+    uint32_t timer_id = m_timer_mgr.add(
+        [=]() {
+            if (func_)
+                func_(seq_id_);
+            awake(seq_id_, RPC_TIME_OUT);
+        },
+        expire_time_);
     if (timer_id == 0)
         return RPC_SYS_ERR;
 
@@ -55,7 +61,7 @@ int32_t ContextController::pending(uint64_t seq_id_, uint64_t expire_time_)
 }
 
 uint64_t ContextController::async_pending(uint64_t seq_id_, const Context::NextFun& next_fun_, Context* context_,
-                                          uint64_t expire_time_)
+                                          uint64_t expire_time_, const PendingTimeoutFunc& func_)
 {
     if (!next_fun_ || !context_)
         return 0;
@@ -66,7 +72,13 @@ uint64_t ContextController::async_pending(uint64_t seq_id_, const Context::NextF
     if (seq_id_ == 0)
         seq_id_ = generate_seq_id();
 
-    uint32_t timer_id = m_timer_mgr.add([=]() { awake(seq_id_, RPC_TIME_OUT); }, expire_time_);
+    uint32_t timer_id = m_timer_mgr.add(
+        [=]() {
+            if (func_)
+                func_(seq_id_);
+            awake(seq_id_, RPC_TIME_OUT);
+        },
+        expire_time_);
     if (timer_id == 0)
         return 0;
 

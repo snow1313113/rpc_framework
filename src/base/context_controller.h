@@ -55,15 +55,18 @@ private:
 class ContextController
 {
 public:
+    /// pending超时回调
+    using PendingTimeoutFunc = std::function<void(uint64_t)>;
+
     /// use_coro表示是否使用协程，不然就是异步的
     bool init(bool use_coro_);
     /// 处理定时器，传入当前时间
     uint32_t process_timeout(uint64_t now_);
     /// 挂起当前协程事务，seq_id_可以generate_seq_id来生成，如果传0则内部自己生成一个
-    int32_t pending(uint64_t seq_id_, uint64_t expire_time_);
+    int32_t pending(uint64_t seq_id_, uint64_t expire_time_, const PendingTimeoutFunc& func_ = nullptr);
     /// 挂起异步事务，seq_id_可以generate_seq_id来生成，如果传0则内部自己生成一个，返回最终使用的seq_id_
     uint64_t async_pending(uint64_t seq_id_, const Context::NextFun& next_fun_, Context* context_,
-                           uint64_t expire_time_);
+                           uint64_t expire_time_, const PendingTimeoutFunc& func_ = nullptr);
     /// 唤醒之前的上下文
     void awake(uint64_t seq_id_, int32_t ret_code_);
     /// 产生一个唯一ID

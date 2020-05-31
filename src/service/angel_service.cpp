@@ -27,9 +27,7 @@ uint32_t AngelService::add_channel(IAngelChannel* channel_)
     if (channel_)
     {
         uint32_t channel_index = m_channels.size() + 1;
-        channel_->set_recv_func([=](const AngelPkgHead& head_, const char* data_, size_t len_, src_) {
-            on_recv(channel_index, head_, data_, len_, src_);
-        });
+        channel_->set_recv_func([=](const AngelPkg& pkg_, uint64_t src_) { on_recv(channel_index, pkg_, src_); });
         m_channels.push_back(channel_);
         return channel_index;
     }
@@ -96,7 +94,6 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
         head.seq_id = new_seq_id;
     else
         head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
-    head.len = req_.ByteSizeLong();
 
     // 从第一个通道发送
     auto ret = send(0, head, req_, broadcast_);
@@ -109,10 +106,8 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
         if (result.second)
         {
             // todo 这是要过期时间，不是超时间隔
-            ret = m_context_ctrl->pending(new_seq_id, timeout_);
-            if (ret == RPC_TIME_OUT)
-                m_rpc_cache.erase(new_seq_id);
-            return ret;
+            return m_context_ctrl->pending(new_seq_id, timeout_,
+                                           [&](uint64_t timeout_seq_id) { m_rpc_cache.erase(timeout_seq_id); });
         }
         else
             return RPC_SYS_ERR;
@@ -122,8 +117,8 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
 }
 
 int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::Message& req_,
-                                google::protobuf::Message* rsp_, NextFun next_fun_, Context* context_, uint64_t dest_,
-                                bool broadcast_, uint32_t timeout_)
+                                google::protobuf::Message* rsp_, const NextFun& next_fun_, Context* context_,
+                                uint64_t dest_, bool broadcast_, uint32_t timeout_)
 {
     if (m_context_ctrl->is_use_corotine())
         return RPC_SYS_ERR;
@@ -145,7 +140,6 @@ int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::prot
         head.seq_id = new_seq_id;
     else
         head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
-    head.len = req_.ByteSizeLong();
 
     // 都从第一个channel发
     auto ret = send(0, head, req_, broadcast_);
@@ -154,14 +148,8 @@ int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::prot
 
     if (rsp_)
     {
-        new_seq_id = m_context_ctrl->async_pending(
-            new_seq_id,
-            [=](int32_t ret_code) {
-                if (ret_code == RPC_TIME_OUT)
-                    m_rpc_cache.erase(new_seq_id);
-                return next_fun_(ret_code);
-            },
-            context_, timeout_);
+        new_seq_id = m_context_ctrl->async_pending(new_seq_id, next_func_, context_, timeout_,
+                                                   [&](uint64_t timeout_seq_id) { m_rpc_cache.erase(timeout_seq_id); });
         if (new_seq_id == 0)
             return RPC_SYS_ERR;
 
@@ -177,29 +165,17 @@ void AngelService::channel_switch(bool stop_)
     m_channel_switch = stop_;
 }
 
-void AngelService::on_recv(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                           uint64_t src_)
+void AngelService::on_recv(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_)
 {
-    if (head_.msg_type == REQ_MSG)
-    {
-        deal_request(channel_index_, head_, data_, len_, src_);
-    }
+    if (pkg_.head.msg_type == REQ_MSG)
+        deal_request(channel_index_, pkg_, src_);
     else
-    {
-        deal_response(head_, data_, len_);
-    }
+        deal_response(pkg_);
 }
 
-void AngelService::deal_request(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                                uint64_t src_)
+bool AngelService::deal_request(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_)
 {
-    deal_request_impl(channel_index_, head_, data_, len_, src_);
-}
-
-bool AngelService::deal_request_impl(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                                     uint64_t src_)
-{
-    auto iter = m_methods.find(head_.cmd);
+    auto iter = m_methods.find(pkg_.head.cmd);
     if (iter == m_methods.end())
         return false;
 
@@ -208,11 +184,11 @@ bool AngelService::deal_request_impl(uint32_t channel_index_, const AngelPkgHead
 
     auto&& rpc_method = iter->second;
     std::unique_ptr<google::protobuf::Message> new_req(rpc_method.request->New());
-    if (!new_req->ParsePartialFromArray(data_, len_))
+    if (!new_req->ParsePartialFromArray(pkg_.body, pkg_.head.len))
         return false;
 
     std::unique_ptr<google::protobuf::Message> new_rsp(rpc_method.response->New());
-    std::unique_ptr<AngelContext> context(new AngelContext(channel_index_, head_, new_req.get(), new_rsp.get()));
+    std::unique_ptr<AngelContext> context(new AngelContext(channel_index_, pkg_.head, new_req.get(), new_rsp.get()));
 
     auto context_ptr = context.get();
     auto proto_service_ptr = rpc_method.service;
@@ -257,33 +233,32 @@ void AngelService::method_finish(AngelContext* context_)
     delete context_;
 }
 
-int32_t AngelService::send(uint32_t channel_index_, const AngelPkgHead& head_, const google::protobuf::Message& msg_,
+int32_t AngelService::send(uint32_t channel_index_, AngelPkgHead& head_, const google::protobuf::Message& msg_,
                            bool broadcast_)
 {
     if (channel_index_ == 0 || channel_index_ > m_channels.size())
         return RPC_SYS_ERR;
 
-    AngelPkgHead* send_head = reinterpret_cast<AngelPkgHead*>(m_send_buf);
-    *send_head = head_;
-    char* body = reinterpret_cast<char*>(send_head + 1);
-    if (head_.len > SEND_BUF_LEN - sizeof(AngelPkgHead))
-        return RPC_SYS_ERR;
-
-    if (head_.len > 0)
+    auto body_len = req_.ByteSizeLong();
+    if (body_len > 0)
     {
-        if (!msg_.SerializeToArray(body, SEND_BUF_LEN - sizeof(AngelPkgHead)))
+        if (body_len > SEND_BUF_LEN)
+            return RPC_SYS_ERR;
+
+        if (!msg_.SerializeToArray(m_send_buf, SEND_BUF_LEN))
             return RPC_SERIALIZE_MSG_ERR;
     }
+    head_.len = body_len;
 
     if (broadcast_)
-        return m_channels[channel_index_ - 1]->broadcast(m_send_buf, head_.len + sizeof(AngelPkgHead));
+        return m_channels[channel_index_ - 1]->broadcast(head_, m_send_buf);
     else
-        return m_channels[channel_index_ - 1]->send(m_send_buf, head_.len + sizeof(AngelPkgHead));
+        return m_channels[channel_index_ - 1]->send(head_, m_send_buf);
 }
 
-void AngelService::deal_response(const AngelPkgHead& head_, const char* data_, size_t len_)
+void AngelService::deal_response(const AngelPkg& pkg_)
 {
-    uint64_t seq_id = head_.seq_id;
+    uint64_t seq_id = pkg_.head.seq_id;
     auto iter = m_rpc_cache.find(seq_id);
     if (iter == m_rpc_cache.end())
         return;
@@ -293,14 +268,14 @@ void AngelService::deal_response(const AngelPkgHead& head_, const char* data_, s
     m_rpc_cache.erase(iter);
 
     int32_t ret_code = RPC_SUCCESS;
-    if (head_.gid != cache.gid || head_.cmd != cache.cmd)
+    if (pkg_.head.gid != cache.gid || pkg_.head.cmd != cache.cmd)
         ret_code = RPC_SYS_ERR;
     else
     {
-        ret_code = head_.ret;
-        if (ret_code == RPC_SUCCESS && len_ > 0)
+        ret_code = pkg_.head.ret;
+        if (ret_code == RPC_SUCCESS && pkg_.head.len > 0)
         {
-            if (!cache.rsp->ParseFromArray(data_, len_))
+            if (!cache.rsp->ParsePartialFromArray(pkg_.body, pkg_.head.len))
                 ret_code = RPC_PARSE_MSG_ERR;
         }
     }

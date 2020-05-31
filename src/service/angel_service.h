@@ -19,16 +19,16 @@ namespace pepper
 class IAngelChannel
 {
 public:
-    /// 参数分别是数据头指针，数据长度，已经数据来源id
-    using RecvFunc = std::function<void(const AngelPkgHead&, const char*, size_t, uint64_t)>;
+    /// 参数分别是数据包，以及数据来源id
+    using RecvFunc = std::function<void(const AngelPkg&, uint64_t)>;
 
     /// 设置收包的回调函数
     void set_recv_func(const RecvFunc& recv_fun_) { m_recv_func = recv_fun_; }
     void set_recv_func(RecvFunc&& recv_fun_) { m_recv_func = std::move(recv_fun_); }
     /// 如果*dest != 0，则根据*dest发送，否则根据默认规则发送，并且dest带回最终发送的目标
-    virtual uint64_t send(const char* buff_, size_t buff_len_, uint64_t* dest_ = nullptr) = 0;
+    virtual uint64_t send(const AngelPkgHead& head_, const char* body_, uint64_t* dest_ = nullptr) = 0;
     /// 广播
-    virtual uint64_t broadcast(const char* buff_, size_t buff_len_) = 0;
+    virtual uint64_t broadcast(const AngelPkgHead& head_, const char* body_) = 0;
     /// 执行处理，返回处理了多少次收包
     virtual size_t process() = 0;
 
@@ -100,27 +100,20 @@ public:
                 uint64_t dest_ = 0, bool broadcast_ = false, uint32_t timeout_ = 3000);
     /// 发起异步rpc，当前不能处于协程中，callback是回包或超时的时候的回调，timeout_是超时时间间隔，单位是ms
     int32_t async_rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::Message& req_,
-                      google::protobuf::Message* rsp_ = nullptr, NextFun next_fun_ = nullptr,
+                      google::protobuf::Message* rsp_ = nullptr, const NextFun& next_fun_ = nullptr,
                       Context* context_ = nullptr, uint64_t dest_ = 0, bool broadcast_ = false,
                       uint32_t timeout_ = 3000);
     /// 设置通道收包开关
     void channel_switch(bool stop_);
 
 private:
-    int32_t send(uint32_t channel_index_, const AngelPkgHead& head_, const google::protobuf::Message& msg_,
+    int32_t send(uint32_t channel_index_, AngelPkgHead& head_, const google::protobuf::Message& msg_,
                  bool broadcast_ = false);
-
-    void on_recv(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_, uint64_t src_);
-
-    void deal_request(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                      uint64_t src_);
-    bool deal_request_impl(uint32_t channel_index_, const AngelPkgHead& head_, const char* data_, size_t len_,
-                           uint64_t src_);
+    void on_recv(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_);
+    void deal_request(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_);
     void deal_method(AngelContext* context_, google::protobuf::Service* service_,
                      const google::protobuf::MethodDescriptor* method_desc_);
-
-    void deal_response(const AngelPkgHead& head_, const char* data_, size_t len_);
-
+    void deal_response(const AngelPkgHead& head_);
     void method_finish(AngelContext* context_);
 
 private:
