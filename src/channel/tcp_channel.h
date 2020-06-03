@@ -10,6 +10,7 @@
 
 namespace pepper
 {
+// todo 接口设计似乎不大合理
 class TcpChannel
 {
 public:
@@ -22,6 +23,9 @@ public:
     bool init(const Addr& listen_addr_, const std::vector<Addr>& dest_addrs_, const RecvFunc& recv_func_);
     size_t update();
     bool send(uint64_t dest_, const char* buf_, size_t len_);
+
+private:
+    void accept();
 
 private:
     asio::io_context m_io_context;
