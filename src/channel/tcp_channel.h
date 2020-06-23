@@ -8,6 +8,12 @@
 #ifndef _TCP_CHANNEL_H_
 #define _TCP_CHANNEL_H_
 
+#include <cstddef>
+#include <functional>
+#include <map>
+#include <string>
+#include "asio.hpp"
+
 namespace pepper
 {
 // todo 接口设计似乎不大合理

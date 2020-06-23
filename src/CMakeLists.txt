@@ -4,7 +4,9 @@ project(rpc_framework)
 
 include_directories(
     ${BASE_INCLUDE}
-    ${LIBCO_INCLUDE})
+    ${LIBCO_INCLUDE}
+    ${PROTOBUF_INCLUDE}
+    ${ASIO_INCLUDE})
 
 file(GLOB_RECURSE CC_SOURCE *.cpp)
 

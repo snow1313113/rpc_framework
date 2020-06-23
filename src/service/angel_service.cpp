@@ -7,6 +7,7 @@
 
 #include "angel_service.h"
 #include <memory>
+#include "base/coroutine_mgr.h"
 #include "base/rpc_error.h"
 
 namespace pepper
@@ -102,7 +103,7 @@ int32_t AngelService::rpc(uint64_t gid_, uint32_t cmd_, const google::protobuf::
 
     if (rsp_)
     {
-        auto result = m_rpc_cache.insert({new_seq_id, {rsp_, gid_, cmd_)}});
+        auto result = m_rpc_cache.insert({new_seq_id, {rsp_, gid_, cmd_}});
         if (result.second)
         {
             // todo 这是要过期时间，不是超时间隔
@@ -148,7 +149,7 @@ int32_t AngelService::async_rpc(uint64_t gid_, uint32_t cmd_, const google::prot
 
     if (rsp_)
     {
-        new_seq_id = m_context_ctrl->async_pending(new_seq_id, next_func_, context_, timeout_,
+        new_seq_id = m_context_ctrl->async_pending(new_seq_id, next_fun_, context_, timeout_,
                                                    [&](uint64_t timeout_seq_id) { m_rpc_cache.erase(timeout_seq_id); });
         if (new_seq_id == 0)
             return RPC_SYS_ERR;
@@ -167,7 +168,7 @@ void AngelService::channel_switch(bool stop_)
 
 void AngelService::on_recv(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_)
 {
-    if (pkg_.head.msg_type == REQ_MSG)
+    if (pkg_.head.msg_type == AngelPkgHead::REQ_MSG)
         deal_request(channel_index_, pkg_, src_);
     else
         deal_response(pkg_);
@@ -183,11 +184,11 @@ bool AngelService::deal_request(uint32_t channel_index_, const AngelPkg& pkg_, u
         return false;
 
     auto&& rpc_method = iter->second;
-    std::unique_ptr<google::protobuf::Message> new_req(rpc_method.request->New());
+    std::unique_ptr<google::protobuf::Message> new_req(rpc_method.req_type->New());
     if (!new_req->ParsePartialFromArray(pkg_.body, pkg_.head.len))
         return false;
 
-    std::unique_ptr<google::protobuf::Message> new_rsp(rpc_method.response->New());
+    std::unique_ptr<google::protobuf::Message> new_rsp(rpc_method.rsp_type->New());
     std::unique_ptr<AngelContext> context(new AngelContext(channel_index_, pkg_.head, new_req.get(), new_rsp.get()));
 
     auto context_ptr = context.get();
@@ -220,10 +221,10 @@ void AngelService::deal_method(AngelContext* context_, google::protobuf::Service
 
 void AngelService::method_finish(AngelContext* context_)
 {
-    if (!(context_->m_head.pkg_flag & FLAG_DONT_RSP))
+    if (!(context_->m_head.pkg_flag & AngelPkgHead::FLAG_DONT_RSP))
     {
-        context_->m_head.pkg_flag |= FLAG_DONT_RSP;
-        context_->m_head.msg_type = RSP_PKG;
+        context_->m_head.pkg_flag |= AngelPkgHead::FLAG_DONT_RSP;
+        context_->m_head.msg_type = AngelPkgHead::RSP_MSG;
         send(context_->m_channel_index, context_->m_head, *(context_->m_rsp));
     }
 
@@ -239,7 +240,7 @@ int32_t AngelService::send(uint32_t channel_index_, AngelPkgHead& head_, const g
     if (channel_index_ == 0 || channel_index_ > m_channels.size())
         return RPC_SYS_ERR;
 
-    auto body_len = req_.ByteSizeLong();
+    auto body_len = msg_.ByteSizeLong();
     if (body_len > 0)
     {
         if (body_len > SEND_BUF_LEN)

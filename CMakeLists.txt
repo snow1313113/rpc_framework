@@ -28,8 +28,11 @@ SET(MY_LIB_DIR ${MY_ROOT}/lib)
 
 SET(BASE_INCLUDE ${MY_ROOT}/src)
 SET(LIBCO_INCLUDE ${MY_ROOT}/third_party/libco)
+SET(ASIO_INCLUDE ${MY_ROOT}/third_party/asio/asio/include)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -fPIC -std=c++14")
+SET(PROTOBUF_ROOT_DIR ${MY_ROOT}/third_party/protobuf)
+SET(PROTOBUF_INCLUDE ${PROTOBUF_ROOT_DIR}/src)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -fPIC -std=c++17")
 
 add_subdirectory(src)
-add_subdirectory(sample)

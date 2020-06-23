@@ -9,13 +9,12 @@
 #define _BASE_SVR_H_
 
 #include "base/context_controller.h"
-#include "base/singleton.h"
 
 namespace pepper
 {
 /// Policy-based design去实现基础server，需要不同的service就当作模版参数传进来组合吧
 template <typename... TServices>
-class BaseSvr : public Singleton<BaseSvr>, public TServices...
+class BaseSvr : public TServices...
 {
 public:
     bool init(bool use_coro_)

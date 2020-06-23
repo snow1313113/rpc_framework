@@ -13,6 +13,10 @@
 #include <vector>
 #include "angel_pkg.h"
 #include "base/context_controller.h"
+#include "base/rpc_error.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/message.h"
+#include "google/protobuf/service.h"
 
 namespace pepper
 {
@@ -84,6 +88,11 @@ class AngelService
 {
 public:
     using NextFun = Context::NextFun;
+    static AngelService& AngelObj()
+    {
+        static AngelService only;
+        return only;
+    }
 
     /// 初始化
     bool init();
@@ -107,13 +116,14 @@ public:
     void channel_switch(bool stop_);
 
 private:
+    ~AngelService() = default;
     int32_t send(uint32_t channel_index_, AngelPkgHead& head_, const google::protobuf::Message& msg_,
                  bool broadcast_ = false);
     void on_recv(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_);
-    void deal_request(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_);
+    bool deal_request(uint32_t channel_index_, const AngelPkg& pkg_, uint64_t src_);
     void deal_method(AngelContext* context_, google::protobuf::Service* service_,
                      const google::protobuf::MethodDescriptor* method_desc_);
-    void deal_response(const AngelPkgHead& head_);
+    void deal_response(const AngelPkg& head_);
     void method_finish(AngelContext* context_);
 
 private:
