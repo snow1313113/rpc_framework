@@ -23,16 +23,24 @@ if(NOT WIN32)
   set(BoldWhite   "${Esc}[1;37m")
 endif()
 
-SET(MY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-SET(MY_LIB_DIR ${MY_ROOT}/lib)
+set(MY_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+set(MY_LIB_DIR ${MY_ROOT}/lib)
 
-SET(BASE_INCLUDE ${MY_ROOT}/src)
-SET(LIBCO_INCLUDE ${MY_ROOT}/third_party/libco)
-SET(ASIO_INCLUDE ${MY_ROOT}/third_party/asio/asio/include)
+set(BASE_INCLUDE ${MY_ROOT}/src)
+set(LIBCO_INCLUDE ${MY_ROOT}/third_party/libco)
+set(ASIO_INCLUDE ${MY_ROOT}/third_party/asio/asio/include)
+set(PLUGIN_INCLUDE ${MY_ROOT}/rpc_service_plugin)
 
-SET(PROTOBUF_ROOT_DIR ${MY_ROOT}/third_party/protobuf)
-SET(PROTOBUF_INCLUDE ${PROTOBUF_ROOT_DIR}/src)
+set(PROTOBUF_ROOT_DIR ${MY_ROOT}/third_party/protobuf)
+set(PROTOBUF_INCLUDE ${PROTOBUF_ROOT_DIR}/src)
+
+set(PROTOBUF_LIB_DIR ${PROTOBUF_INCLUDE}/.libs/)
+
+set(PROTOC_TOOL ${PROTOBUF_INCLUDE}/protoc)
+
+set(BINARY_PATH ${MY_ROOT}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -g -fPIC -std=c++17")
 
+add_subdirectory(rpc_service_plugin)
 add_subdirectory(src)

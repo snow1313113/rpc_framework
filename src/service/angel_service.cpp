@@ -35,7 +35,7 @@ uint32_t AngelService::add_channel(IAngelChannel* channel_)
     return 0;
 }
 
-bool AngelService::register_pb_service(google::protobuf::Service* service_)
+bool AngelService::register_angel_service(google::protobuf::Service* service_)
 {
     auto service_desc = service_->GetDescriptor();
     auto type = service_desc->options().GetExtension(service_type);

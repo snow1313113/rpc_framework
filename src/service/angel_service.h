@@ -101,7 +101,7 @@ public:
     /// 添加通道，返回通道的索引
     uint32_t add_channel(IAngelChannel* channel_);
     /// 注册提供的服务
-    bool register_pb_service(google::protobuf::Service* service_);
+    bool register_angel_service(google::protobuf::Service* service_);
     /// 循环收发包处理，返回处理了多个请求和超时事件，适配BaseSvr
     size_t loop_once();
     /// 发起rpc，当前需要处于协程中，timeout_是超时时间间隔，单位是ms
