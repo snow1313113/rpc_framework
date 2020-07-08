@@ -18,37 +18,27 @@
 
 namespace pepper
 {
+// 和angel service配套的上下文信息
 struct AngelContext : public Context, public google::protobuf::RpcController
 {
     AngelContext() = default;
-    AngelContext(uint32_t index_, const AngelPkgHead& pkg_head_, google::protobuf::Message* request_,
-                 google::protobuf::Message* response_)
+    AngelContext(uint32_t channel_index_, const AngelPkgHead& head_, google::protobuf::Message* req_,
+                 google::protobuf::Message* rsp_)
     {
-        err_msg = "";
-
-        m_head.gid = pkg_head_.gid;
-        m_head.seq_id = pkg_head_.seq_id;
-        m_head.cmd = pkg_head_.cmd;
-        m_head.pkg_flag = pkg_head_.pkg_flag;
-
-        m_channel_index = index_;
-
-        req = request_;
-        rsp = response_;
+        m_err_msg = "";
+        m_channel_index = channel_index_;
+        m_head = head_;
+        m_req = req_;
+        m_rsp = rsp_;
     }
 
     virtual void Reset() override
     {
         m_err_msg = "";
-
-        m_head.src = 0;
-        m_head.dest = 0;
-        m_head.gid = 0;
-        m_head.seq_id = 0;
-        m_head.cmd = 0;
-        m_head.pkg_flag = 0;
-        m_head.msg_type = 0;
         m_channel_index = 0;
+        std::memset(&m_head, 0, sizeof(m_head));
+        m_req = nullptr;
+        m_rsp = nullptr;
     }
 
     virtual bool Failed() const override { return m_ret_code != 0; }
@@ -63,28 +53,11 @@ struct AngelContext : public Context, public google::protobuf::RpcController
     virtual bool IsCanceled() const override { return false; }
     virtual void NotifyOnCancel(google::protobuf::Closure* callback) override {}
 
-    template <typename T>
-    const T* Req() const
-    {
-        return ::google::protobuf::down_cast<T*>(req);
-    }
-
-    template <typename T>
-    T* Rsp() const
-    {
-        return ::google::protobuf::down_cast<T*>(rsp);
-    }
-
     std::string m_err_msg = "";
-    AngelPkgHead m_head;
     uint32_t m_channel_index = 0;
-
-protected:
-    friend class AngelService;
-    // 请求包结构
-    google::protobuf::Message* req = nullptr;
-    // 回包结构
-    google::protobuf::Message* rsp = nullptr;
+    AngelPkgHead m_head;
+    google::protobuf::Message* m_req = nullptr;
+    google::protobuf::Message* m_rsp = nullptr;
 };
 
 }  // namespace pepper

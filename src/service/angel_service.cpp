@@ -9,6 +9,7 @@
 #include <memory>
 #include "base/coroutine_mgr.h"
 #include "base/rpc_error.h"
+#include "rpc_options.pb.h"
 
 namespace pepper
 {

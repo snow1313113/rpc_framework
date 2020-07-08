@@ -21,6 +21,9 @@ struct Singleton
 
 protected:
     ~Singleton() {}
+    Singleton() = default;
+    Singleton(const Singleton&) = delete;
+    Singleton& operator=(const Singleton&) = delete;
 };
 
 }  // namespace pepper
