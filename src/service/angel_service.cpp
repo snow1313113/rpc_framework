@@ -38,25 +38,32 @@ uint32_t AngelService::add_channel(IAngelChannel* channel_)
 bool AngelService::register_angel_service(google::protobuf::Service* service_)
 {
     auto service_desc = service_->GetDescriptor();
-    auto type = service_desc->options().GetExtension(service_type);
-    if (type != ANGEL_SERVICE)
-        return false;
+    bool is_all_angel = true;
+    auto all_prefix = service_desc->options().GetExtension(all_service_prefix);
+    if (all_prefix.empty() || all_prefix != "Angel")
+        is_all_angel = false;
 
-    bool is_service_private = service_desc->options().GetExtension(is_private);
+    bool is_service_private = service_desc->options().GetExtension(is_all_private);
     for (int i = 0; i < service_desc->method_count(); ++i)
     {
         auto method = service_desc->method(i);
-        if (method->options().GetExtension(service_type) != ANGEL_METHOD)
+
+        auto method_prefix = method->options().GetExtension(service_prefix);
+        bool is_angel_method = true;
+        if (method_prefix.empty() || method_prefix != "Angel")
+            is_angel_method = false;
+
+        if (!is_all_angel && !is_angel_method)
             continue;
 
         uint32_t cmd = method->options().GetExtension(cmd);
         if (cmd == 0)
             return false;
 
-        bool is_private = is_service_private || method->options().GetExtension(is_private);
+        bool is_method_private = is_service_private || method->options().GetExtension(is_private);
         auto result = m_methods.insert({cmd,
                                         {service_, method, &(service_->GetRequestPrototype(method)),
-                                         &(service_->GetResponsePrototype(method)), is_private}});
+                                         &(service_->GetResponsePrototype(method)), is_method_private}});
         if (!(result.second))
             return false;
     }

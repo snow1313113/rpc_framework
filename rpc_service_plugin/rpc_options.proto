@@ -4,7 +4,7 @@ import "google/protobuf/descriptor.proto";
 extend google.protobuf.ServiceOptions
 {
     // 整个service是否是内部私有
-    bool all_private = 40001;
+    bool is_all_private = 40001;
     // 整个service都是默认实现的service前缀
     string all_service_prefix = 40002;
 }
@@ -16,7 +16,7 @@ extend google.protobuf.MethodOptions
     // 超时时间，毫秒
     uint32 timeout = 40002;
     // 是否内部私有rpc
-    bool private = 40003;
+    bool is_private = 40003;
     // 是否接受广播
     bool broadcast = 40004;
     // 单个method实现的service前缀
